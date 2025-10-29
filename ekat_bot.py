@@ -1,113 +1,44 @@
-import json
-from datetime import datetime
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-import os
-import requests
+# ---------------- Callback Query ----------------
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN environment değişkeni eksik!")
+def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    chat_id = query.message.chat_id
+    subs = load_subscribers()
+    if query.data == 'stop':
+        if chat_id in subs:
+            subs.remove(chat_id)
+            save_subscribers(subs)
+        query.answer(text="Bildirimler kapatıldı ✅")
+        query.edit_message_reply_markup(reply_markup=None)
 
-BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
-SUBSCRIBERS_FILE = "subscribers.json"
+# ---------------- /start komutu ----------------
 
-def load_subscribers():
-    if not os.path.exists(SUBSCRIBERS_FILE):
-        return []
-    with open(SUBSCRIBERS_FILE, "r") as f:
-        return json.load(f)
+def start(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    subs = load_subscribers()
+    if chat_id not in subs:
+        subs.append(chat_id)
+        save_subscribers(subs)
+    update.message.reply_text("✅ Abonelik aktif edildi. Eğitim bildirimleri gönderilecektir.")
 
-def save_subscribers(subs):
-    with open(SUBSCRIBERS_FILE, "w") as f:
-        json.dump(subs, f)
-
-def telegram_mesaj_gonder(chat_id, mesaj, reply_markup=None):
-    url = f"{BASE_URL}/sendMessage"
-    data = {"chat_id": chat_id, "text": mesaj, "parse_mode": "Markdown"}
-    if reply_markup:
-        data["reply_markup"] = json.dumps(reply_markup)
-    try:
-        requests.post(url, data=data)
-    except Exception as e:
-        print(f"Telegram mesaj hatası: {e}")
-
-def egitimleri_cek():
-    try:
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=options)
-
-        driver.get("https://ekat.euas.gov.tr")
-        driver.implicitly_wait(5)
-
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        driver.quit()
-
-        cards = soup.find_all("div", class_="training-card")
-        egitimler = []
-
-        for card in cards:
-            baslik = card.find("h3", class_="training-title")
-            baslik = baslik.get_text(strip=True) if baslik else "Bilinmiyor"
-            yer = baslama = bitis = dolu = kontenjan = kalan = "Bilinmiyor"
-
-            for p in card.find_all("p"):
-                label = p.find("span", class_="training-label")
-                if not label: continue
-                label_text = label.get_text(strip=True)
-
-                if label_text == "Dolu Kontenjan:":
-                    used = p.find("span", class_="used-quotas")
-                    dolu = used.get_text(strip=True) if used else p.get_text(strip=True).replace("Dolu Kontenjan:", "").strip()
-                elif label_text == "Eğitim Kontenjan:":
-                    kontenjan = p.get_text(strip=True).replace("Eğitim Kontenjan:", "").strip()
-                elif label_text == "Kalan Kontenjan:":
-                    used = p.find("span", class_="used-quotas")
-                    kalan = used.get_text(strip=True) if used else p.get_text(strip=True).replace("Kalan Kontenjan:", "").strip()
-                elif label_text == "Eğitim Yeri:":
-                    yer = p.get_text(strip=True).replace("Eğitim Yeri:", "").strip()
-                elif label_text == "Eğitim Başlama Tarihi:":
-                    baslama = p.get_text(strip=True).replace("Eğitim Başlama Tarihi:", "").strip()
-                elif label_text == "Eğitim Bitiş Tarihi:":
-                    bitis = p.get_text(strip=True).replace("Eğitim Bitiş Tarihi:", "").strip()
-
-            egitimler.append({"baslik": baslik, "yer": yer, "baslama": baslama, "bitis": bitis, "dolu": dolu, "kontenjan": kontenjan, "kalan": kalan})
-
-        return egitimler
-
-    except Exception as e:
-        print(f"❌ Eğitim çekme hatası: {e}")
-        return []
+# ---------------- Main ----------------
 
 def main():
-    subs = load_subscribers()
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CallbackQueryHandler(button))
+
+    updater.start_polling()
+
+    bot = updater.bot
     egitimler = egitimleri_cek()
-    tarih = datetime.now().strftime("[%d/%m/%Y %H:%M]")
-
-    if not egitimler:
-        mesaj = f"{tarih} ❌ *Aktif eğitim yoktur.*"
-    else:
-        mesaj = f"{tarih} ✅ *{len(egitimler)} adet aktif eğitim bulundu:*\n\n"
-        for e in egitimler:
-            mesaj += (
-                f"📘 *{e['baslik']}*\n"
-                f"🏫 _Eğitim yeri:_ {e['yer']}\n"
-                f"🗓️ _Başlama:_ {e['baslama']}\n"
-                f"📅 _Bitiş:_ {e['bitis']}\n"
-                f"👥 _Dolu Kontenjan:_ {e['dolu']}\n"
-                f"🎯 _Eğitim Kontenjanı:_ {e['kontenjan']}\n"
-                f"🧮 _Kalan:_ {e['kalan']}\n"
-                "────────────────────\n"
-            )
-
-    buttons = {"keyboard": [[{"text": "📩 Bildirimleri Kapat"}]], "resize_keyboard": True}
+    subs = load_subscribers()
     for s in subs:
-        telegram_mesaj_gonder(s, mesaj, reply_markup=buttons)
-        print(f"Mesaj gönderildi → {s}")
+        gonder_egitimler(bot, s, egitimler)
 
-if __name__ == "__main__":
+    updater.idle()
+
+if name == "__main__":
     main()
