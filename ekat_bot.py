@@ -1,8 +1,10 @@
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
-import os
 import json
+from datetime import datetime
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import os
+import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -33,19 +35,31 @@ def telegram_mesaj_gonder(chat_id, mesaj, reply_markup=None):
 
 def egitimleri_cek():
     try:
-        url = "https://ekat.euas.gov.tr"
-        r = requests.get(url, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        driver = webdriver.Chrome(options=options)
+
+        driver.get("https://ekat.euas.gov.tr")
+        driver.implicitly_wait(5)
+
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        driver.quit()
+
         cards = soup.find_all("div", class_="training-card")
         egitimler = []
+
         for card in cards:
             baslik = card.find("h3", class_="training-title")
             baslik = baslik.get_text(strip=True) if baslik else "Bilinmiyor"
             yer = baslama = bitis = dolu = kontenjan = kalan = "Bilinmiyor"
+
             for p in card.find_all("p"):
                 label = p.find("span", class_="training-label")
                 if not label: continue
                 label_text = label.get_text(strip=True)
+
                 if label_text == "Dolu Kontenjan:":
                     used = p.find("span", class_="used-quotas")
                     dolu = used.get_text(strip=True) if used else p.get_text(strip=True).replace("Dolu Kontenjan:", "").strip()
@@ -60,8 +74,11 @@ def egitimleri_cek():
                     baslama = p.get_text(strip=True).replace("Eğitim Başlama Tarihi:", "").strip()
                 elif label_text == "Eğitim Bitiş Tarihi:":
                     bitis = p.get_text(strip=True).replace("Eğitim Bitiş Tarihi:", "").strip()
+
             egitimler.append({"baslik": baslik, "yer": yer, "baslama": baslama, "bitis": bitis, "dolu": dolu, "kontenjan": kontenjan, "kalan": kalan})
+
         return egitimler
+
     except Exception as e:
         print(f"❌ Eğitim çekme hatası: {e}")
         return []
@@ -70,6 +87,7 @@ def main():
     subs = load_subscribers()
     egitimler = egitimleri_cek()
     tarih = datetime.now().strftime("[%d/%m/%Y %H:%M]")
+
     if not egitimler:
         mesaj = f"{tarih} ❌ *Aktif eğitim yoktur.*"
     else:
@@ -85,6 +103,7 @@ def main():
                 f"🧮 _Kalan:_ {e['kalan']}\n"
                 "────────────────────\n"
             )
+
     buttons = {"keyboard": [[{"text": "📩 Bildirimleri Kapat"}]], "resize_keyboard": True}
     for s in subs:
         telegram_mesaj_gonder(s, mesaj, reply_markup=buttons)
