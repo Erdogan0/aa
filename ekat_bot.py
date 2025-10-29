@@ -1,6 +1,4 @@
-# Retry writing the file correctly (ensure imports available in this cell scope)
-import os, json
-content = r'''import json
+import json
 import os
 from datetime import datetime
 try:
@@ -310,15 +308,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
 
-path = "/mnt/data/ekat_bot_updated.py"
-with open(path, "w", encoding="utf-8") as f:
-    f.write(content)
-
-subs_path = "/mnt/data/subscribers.json"
-if not os.path.exists(subs_path):
-    with open(subs_path, "w", encoding="utf-8") as f:
-        json.dump([], f)
-
-print("Wrote updated file to:", path)
