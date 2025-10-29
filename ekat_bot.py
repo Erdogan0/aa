@@ -105,5 +105,5 @@ def main():
         telegram_mesaj_gonder(s, mesaj)
         print(f"Mesaj gönderildi → {s}")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
