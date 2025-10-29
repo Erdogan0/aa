@@ -45,5 +45,5 @@ def ekat_check_and_notify():
     except Exception as e:
         print("Hata:", e)
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     ekat_check_and_notify()
