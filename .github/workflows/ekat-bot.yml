@@ -1,26 +1,25 @@
-name: EKAT Telegram Bot
+name: EKAT Bot Kontrol
 
 on:
   schedule:
-    - cron: "0 7 * * *"  # Her gün Türkiye saatiyle 10:00 (UTC+3 = 07:00 UTC)
-  workflow_dispatch:      # Manuel başlatmak için
-
+    - cron: "0 * * * *"  # Her saat başında
+  workflow_dispatch:      # Manuel çalıştırma seçeneği
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Repo'yu klonla
-        uses: actions/checkout@v4
+      - name: Repo çekiliyor
+        uses: actions/checkout@v3
 
-      - name: Python kur
-        uses: actions/setup-python@v5
+      - name: Python kurulumu
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
-      - name: Bağımlılıkları yükle
+      - name: Kütüphaneler yükleniyor
         run: pip install -r requirements.txt
 
-      - name: Botu çalıştır
+      - name: Bot çalıştırılıyor
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: python ekat_bot.py
